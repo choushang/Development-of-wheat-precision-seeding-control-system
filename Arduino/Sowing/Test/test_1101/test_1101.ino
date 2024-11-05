@@ -11,12 +11,14 @@ void setup()
   pinMode(EN_PIN, OUTPUT);
   digitalWrite(EN_PIN, LOW);    // 使能步进电机
 
-  stepper.setMaxSpeed(1600); // 设置最大速度为每秒 1600 步
-  stepper.setCurrentPosition(0); // 设置初始位置为 0 步
-  stepper.setSpeed(-200); // 调整电机转速
+  stepper.setMaxSpeed(1200);     // 设置最大速度为每秒 1200 步
 }
 
 void loop() 
 {
-  stepper.runSpeed(); // 持续运行步进电机
+  // 设置速度为正方向 1200 步每秒，持续运行直到达到目标
+  stepper.setSpeed(800);
+  while (true) {
+    stepper.runSpeed();
+  }
 }
