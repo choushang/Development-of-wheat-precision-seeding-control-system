@@ -8,3 +8,6 @@ Used for wheat hole sowing
 
 11.5
 1.测试CAN通讯接发
+
+11.6
+1.测试CAN模块+Arduino单片机控制电机
