@@ -1,13 +1,15 @@
+// 使用Arduino+Can通讯模块控制电机
+
 #include <SPI.h>
 #include "DFRobot_MCP2515.h"
 
 #define CAN_CS_PIN 10  // 定义片选引脚为 D10
 
-DFRobot_MCP2515 can(CAN_CS_PIN);  // 实例化 MCP2515 对象
+DFRobot_MCP2515 can(CAN_CS_PIN);  
 
 void setup() 
 {
-  Serial.begin(115200);  // 初始化串口，用于查看调试信息
+  Serial.begin(115200);  
 
   // 使用 begin() 方法配置 CAN 控制器波特率
   while (can.begin(CAN_1000KBPS) != CAN_OK) {  // 修改波特率为 1 Mbps
@@ -27,8 +29,7 @@ void setup()
 
 void loop() 
 {
-  // 发送控制命令到电机，以 45 r/min 的速度旋转，8 细分
-  uint8_t data[] = {0x01, 0x01, 0x20, 0x00, 0x00, 0x00, 0x3F};  // 控制模式：速度控制，方向：顺时针，细分值：8，速度：
+  uint8_t data[] = {0x01, 0x01, 0x20, 0x00, 0x00, 0x00, 0x3F};  // 
   if (can.sendMsgBuf(0x001, 0, sizeof(data), data) == MCP2515_OK) {  // 修改 ID 为 0x001 以匹配电机的默认 ID
     Serial.println("数据发送成功！");
   } else {
