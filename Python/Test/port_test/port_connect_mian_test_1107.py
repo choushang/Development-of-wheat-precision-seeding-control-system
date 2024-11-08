@@ -29,6 +29,7 @@ logging.basicConfig(
 )
 
 
+
 class WelcomeWindow(QWidget):
     def __init__(self, stacked_widget):
         super().__init__()
@@ -45,28 +46,28 @@ class WelcomeWindow(QWidget):
 class InformationShowWindow(QWidget):
     def __init__(self, stacked_widget):
         super().__init__()
+        self.worker_sow = None
+        self.sowing_paused = False
         self.open_sow_pushButton = None
         self.pause_sow_pushButton = None
         self.close_sow_pushButton = None
-        self.plot_map_pushButton = None
-        self.upload_sow_information_pushButton = None
-        self.calculate_area_pushButton = None
-        self.stop_pushButton = None
-        self.open_gnss_pushButton = None
-        self.close_gnss_pushButton = None
-        self.open_speed_sensor_pushButton = None
-        self.close_speed_sensor_pushButton = None
-        self.open_box_sensor_pushButton = None
-        self.close_box_sensor_pushButton = None
-        self.sow_selected_port = None
-        self.box_sersor_selected_port = None
-        self.speed_sersor_selected_port = None
-        self.gnss_selected_port = None
+        # self.plot_map_pushButton = None
+        # self.upload_sow_information_pushButton = None
+        # self.calculate_area_pushButton = None
+        # self.stop_pushButton = None
+        # self.open_gnss_pushButton = None
+        # self.close_gnss_pushButton = None
+        # self.open_speed_sensor_pushButton = None
+        # self.close_speed_sensor_pushButton = None
+        # self.open_box_sensor_pushButton = None
+        # self.close_box_sensor_pushButton = None
+        # self.sow_selected_port = None
+        # self.box_sersor_selected_port = None
+        # self.speed_sersor_selected_port = None
+        # self.gnss_selected_port = None
         self.stacked_widget = stacked_widget
         self.ui = Ui_Form()
         self.ui.setupUi(self)
-        self.worker_one = None
-        self.worker_two = None
         self.ui_process()
         self.setFixedSize(1500, 770)
 
@@ -88,7 +89,14 @@ class InformationShowWindow(QWidget):
         self.open_gnss_pushButton.clicked.connect(lambda: self.open_gnss_port_selection())
         self.open_speed_sensor_pushButton.clicked.connect(lambda: self.open_speed_sensor_port_selection())
         self.open_box_sensor_pushButton.clicked.connect(lambda: self.open_box_sensor_port_selection())
+
+
+        self.sowing_one_number = self.ui.doubleSpinBox
+        self.sowing_one_number.editingFinished.connect(self.update_worker_sowing_value)
+
         self.open_sow_pushButton.clicked.connect(lambda: self.open_sow_port_selection())
+        self.pause_sow_pushButton.clicked.connect(self.toggle_pause_sow)
+        self.close_sow_pushButton.clicked.connect(self.close_sow_port)
 
     def open_gnss_port_selection(self):
         # 获取可用的串口列表
@@ -129,13 +137,70 @@ class InformationShowWindow(QWidget):
     def open_sow_port_selection(self):
         # 获取可用的串口列表
         ports = list(serial.tools.list_ports.comports())
-        port_descriptions = [port.description for port in ports] if ports else ['无可用串口']
+        port_names = [port.description for port in ports] if ports else ['无可用串口']
+        port_description, ok = QInputDialog.getItem(self, "选择播种串口", "可用的串口列表：", port_names, 0, False)
 
-        # 创建一个对话框供用户选择串口
-        port, ok = QInputDialog.getItem(self, "选择排种器串口", "可用的串口列表：", port_descriptions, 0,
-                                                    False)
-        if ok and port:
-            self.sow_selected_port = port
+        if ok and port_description:
+            selected_port = next((port.device for port in ports if port.description == port_description), None)
+            if selected_port:
+                # 创建并启动 Worker_sow 线程
+                self.worker_sow = Worker_sow()
+                self.worker_sow.set_port(selected_port)
+                self.worker_sow.start()
+
+                # 连接信号
+                self.worker_sow.finished_signal.connect(self.on_worker_sow_finished)
+                self.worker_sow.mistake_message_transmit.connect(self.on_worker_sow_error)
+                pass
+            pass
+        pass
+
+    def toggle_pause_sow(self):
+        """暂停或恢复播种"""
+        if self.worker_sow is not None and self.worker_sow.isRunning():
+            try:
+                if self.sowing_paused:
+                    # 恢复播种
+                    sowing_value = self.sowing_one_number.value()
+                    self.worker_sow.update_sowing_value(sowing_value)  # 恢复之前的转速
+                    self.pause_sow_pushButton.setText("暂停播种")
+                    self.sowing_paused = False
+                else:
+                    # 暂停播种，发送转速为0
+                    self.worker_sow.update_sowing_value(0.0)
+                    self.pause_sow_pushButton.setText("恢复播种")
+                    self.sowing_paused = True
+            except Exception as e:
+                logging.error(f"Error occurred during toggle pause: {str(e)}", exc_info=True)
+                QMessageBox.critical(self, "错误", f"暂停/恢复播种时发生错误：{str(e)}")
+                pass
+            pass
+        pass
+
+    def close_sow_port(self):
+        if self.worker_sow is not None and self.worker_sow.isRunning():
+            try:
+                # 停止线程运行
+                self.worker_sow.stop()
+                self.worker_sow.wait()  # 等待线程完全结束
+                self.worker_sow = None
+            except Exception as e:
+                logging.error(f"Error occurred during closing sow port: {str(e)}", exc_info=True)
+                QMessageBox.critical(self, "错误", f"关闭播种串口时发生错误：{str(e)}")
+
+
+    def on_worker_sow_finished(self):
+        QMessageBox.information(self, "信息", "播种已完成")
+        pass
+
+    def on_worker_sow_error(self, message):
+        QMessageBox.critical(self, "错误", f"播种线程错误：{message}")
+        pass
+
+    def update_worker_sowing_value(self):
+        if self.worker_sow is not None:
+            sowing_value = self.sowing_one_number.value()
+            self.worker_sow.update_sowing_value(sowing_value)
             pass
         pass
 
@@ -202,22 +267,35 @@ class Worker_gnss(QThread):
 class Worker_sow(QThread):
     finished_signal = pyqtSignal()
     mistake_message_transmit = pyqtSignal(str)
-    message_generated = threading.Event()
 
     def __init__(self):
         super(Worker_sow, self).__init__()
+        self.previous_sowing_value = None
         self.ser = None
-        self.port = None  # 由用户选择后设置
+        self.port = None
         self.baudrate = 115200
         self.should_run = True
-        pass
+        self.sowing_value = 0.0
 
     def set_port(self, port):
         self.port = port
         pass
 
     def stop(self):
+        """停止线程运行"""
         self.should_run = False
+        if self.ser and self.ser.is_open:
+            try:
+                # 发送停止命令
+                self.ser.write("0\r\n".encode())
+            except Exception as e:
+                logging.error(f"Error occurred while sending stop command: {str(e)}", exc_info=True)
+            finally:
+                self.ser.close()  # 关闭串口
+
+    @pyqtSlot(float)
+    def update_sowing_value(self, value):
+        self.sowing_value = value
 
     def run(self):
         try:
@@ -225,13 +303,12 @@ class Worker_sow(QThread):
                 self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
                 while self.should_run:
                     try:
-                        raw_message = self.ser.readline().decode('utf-8').rstrip()
-                        if raw_message:
-                            print(f"收到数据：{raw_message}")
-                            # 可以在这里发出信号或者执行其他操作
-
+                        if self.sowing_value != self.previous_sowing_value:
+                            self.previous_sowing_value = self.sowing_value
+                            message_to_send = f"{self.sowing_value}\r\n"
+                            if self.ser.is_open:  # 检查串口是否打开
+                                self.ser.write(message_to_send.encode())
                     except Exception as err_1:
-                        # 读取数据时发生异常
                         logging.error(f"Error occurred in SOW worker thread: {str(err_1)}", exc_info=True)
                         self.mistake_message_transmit.emit(str(err_1))
                         continue
@@ -239,8 +316,14 @@ class Worker_sow(QThread):
             logging.error(f"Failed to initialize SOW worker: {str(err_1)}", exc_info=True)
             self.mistake_message_transmit.emit(str(err_1))
         finally:
-            if self.ser:
-                self.ser.close()
+            if self.ser and self.ser.is_open:
+                try:
+                    self.ser.write("0\r\n".encode())  # 发送停止命令
+                except Exception as e:
+                    logging.error(f"Error occurred while sending stop command in finally block: {str(e)}",
+                                  exc_info=True)
+                finally:
+                    self.ser.close()
             self.finished_signal.emit()
 
 
