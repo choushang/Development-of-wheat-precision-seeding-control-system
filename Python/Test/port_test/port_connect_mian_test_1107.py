@@ -19,6 +19,14 @@ from BDS_distance_function import BDS_distance
 from deleter_fun import del_xlsx
 from pynmea_fun import *
 import serial.tools.list_ports
+import logging
+
+logging.basicConfig(
+    filename='error_log.txt',  # 日志文件名
+    level=logging.ERROR,       # 设置日志记录级别，ERROR 表示只记录错误及以上级别的日志
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # 日志记录格式
+    datefmt='%Y-%m-%d %H:%M:%S'  # 日期和时间格式
+)
 
 
 class WelcomeWindow(QWidget):
@@ -85,10 +93,10 @@ class InformationShowWindow(QWidget):
     def open_gnss_port_selection(self):
         # 获取可用的串口列表
         ports = list(serial.tools.list_ports.comports())
-        port_names = [port.device for port in ports] if ports else ['无可用串口']
+        port_descriptions = [port.description for port in ports] if ports else ['无可用串口']
 
         # 创建一个对话框供用户选择串口
-        port, ok = QInputDialog.getItem(self, "选择GNSS串口", "可用的串口列表：", port_names, 0, False)
+        port, ok = QInputDialog.getItem(self, "选择GNSS串口", "可用的串口列表：", port_descriptions, 0, False)
         if ok and port:
             self.gnss_selected_port = port
             pass
@@ -97,10 +105,10 @@ class InformationShowWindow(QWidget):
     def open_speed_sensor_port_selection(self):
         # 获取可用的串口列表
         ports = list(serial.tools.list_ports.comports())
-        port_names = [port.device for port in ports] if ports else ['无可用串口']
+        port_descriptions = [port.description for port in ports] if ports else ['无可用串口']
 
         # 创建一个对话框供用户选择串口
-        port, ok = QInputDialog.getItem(self, "选择速度传感器串口", "可用的串口列表：", port_names, 0, False)
+        port, ok = QInputDialog.getItem(self, "选择速度传感器串口", "可用的串口列表：", port_descriptions, 0, False)
         if ok and port:
             self.speed_sersor_selected_port = port
             pass
@@ -109,10 +117,10 @@ class InformationShowWindow(QWidget):
     def open_box_sensor_port_selection(self):
         # 获取可用的串口列表
         ports = list(serial.tools.list_ports.comports())
-        port_names = [port.device for port in ports] if ports else ['无可用串口']
+        port_descriptions = [port.description for port in ports] if ports else ['无可用串口']
 
         # 创建一个对话框供用户选择串口
-        port, ok = QInputDialog.getItem(self, "选择种箱信息传感器串口", "可用的串口列表：", port_names, 0, False)
+        port, ok = QInputDialog.getItem(self, "选择种箱信息传感器串口", "可用的串口列表：", port_descriptions, 0, False)
         if ok and port:
             self.box_sersor_selected_port = port
             pass
@@ -121,10 +129,11 @@ class InformationShowWindow(QWidget):
     def open_sow_port_selection(self):
         # 获取可用的串口列表
         ports = list(serial.tools.list_ports.comports())
-        port_names = [port.device for port in ports] if ports else ['无可用串口']
+        port_descriptions = [port.description for port in ports] if ports else ['无可用串口']
 
         # 创建一个对话框供用户选择串口
-        port, ok = QInputDialog.getItem(self, "选择排种器串口", "可用的串口列表：", port_names, 0, False)
+        port, ok = QInputDialog.getItem(self, "选择排种器串口", "可用的串口列表：", port_descriptions, 0,
+                                                    False)
         if ok and port:
             self.sow_selected_port = port
             pass
@@ -139,7 +148,7 @@ class Worker_gnss(QThread):
     def __init__(self):
         super(Worker_gnss, self).__init__()
         self.ser = None
-        self.port = 'COM15'  # 默认端口
+        self.port = None
         self.baudrate = 115200
         self.should_run = True
         self.gnss_messages_send = None
@@ -186,6 +195,53 @@ class Worker_gnss(QThread):
         finally:
             self.finished_signal.emit()
             self.ser.close()
+            pass
+        pass
+    pass
+
+class Worker_sow(QThread):
+    finished_signal = pyqtSignal()
+    mistake_message_transmit = pyqtSignal(str)
+    message_generated = threading.Event()
+
+    def __init__(self):
+        super(Worker_sow, self).__init__()
+        self.ser = None
+        self.port = None  # 由用户选择后设置
+        self.baudrate = 115200
+        self.should_run = True
+        pass
+
+    def set_port(self, port):
+        self.port = port
+        pass
+
+    def stop(self):
+        self.should_run = False
+
+    def run(self):
+        try:
+            if self.baudrate is not None and self.port is not None:
+                self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+                while self.should_run:
+                    try:
+                        raw_message = self.ser.readline().decode('utf-8').rstrip()
+                        if raw_message:
+                            print(f"收到数据：{raw_message}")
+                            # 可以在这里发出信号或者执行其他操作
+
+                    except Exception as err_1:
+                        # 读取数据时发生异常
+                        logging.error(f"Error occurred in SOW worker thread: {str(err_1)}", exc_info=True)
+                        self.mistake_message_transmit.emit(str(err_1))
+                        continue
+        except Exception as err_1:
+            logging.error(f"Failed to initialize SOW worker: {str(err_1)}", exc_info=True)
+            self.mistake_message_transmit.emit(str(err_1))
+        finally:
+            if self.ser:
+                self.ser.close()
+            self.finished_signal.emit()
 
 
 if __name__ == '__main__':
