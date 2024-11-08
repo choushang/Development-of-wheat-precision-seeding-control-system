@@ -27,7 +27,8 @@ void setup()
 
 void loop() 
 {
-  if (Serial.available() > 0) {
+  if (Serial.available() > 0) 
+  {
     String input = Serial.readStringUntil('\n');
     float rpm = input.toFloat();
     if (rpm > 0) {
@@ -46,14 +47,19 @@ void loop()
       Serial.println(speedLow, HEX);
 
       // 发送控制命令到电机
-      uint8_t data[] = {0x01, 0x01, 0x08, 0x00, 0x00, speedHigh, speedLow};  // 控制模式：速度控制，方向：顺时针，细分值：8，速度：动态输入
+      uint8_t data[] = {0x01, 0x01, 0x20, 0x00, 0x00, speedHigh, speedLow};  // 控制模式：速度控制，方向：顺时针，细分值：8，速度：动态输入
       if (can.sendMsgBuf(0x001, 0, sizeof(data), data) == MCP2515_OK) {  // 修改 ID 为 0x001 以匹配电机的默认 ID
         Serial.println("数据发送成功！");
-      } else {
-        Serial.println("数据发送失败！");
       }
-    } else {
-      Serial.println("请输入有效的 RPM 值！");
+    }
+    else if (rpm == 0) 
+    {
+    // 发送停止命令到电机
+      uint8_t data[] = {0x01, 0x01, 0x08, 0x20, 0x00, 0x00, 0x00};  // 控制模式：速度控制，方向：顺时针，细分值：8，速度：0
+      if (can.sendMsgBuf(0x001, 0, sizeof(data), data) == MCP2515_OK) 
+      {
+       Serial.println("电机停止成功！");
+      } 
     }
   }
   delay(1000);  // 每隔 1 秒检查一次
