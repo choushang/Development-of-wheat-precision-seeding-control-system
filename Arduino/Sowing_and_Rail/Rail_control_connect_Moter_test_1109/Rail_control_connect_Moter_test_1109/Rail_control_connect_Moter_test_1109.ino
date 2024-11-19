@@ -23,12 +23,12 @@ void setup()
 
     pinMode(buttonPin, INPUT_PULLUP);  // 启用内部上拉电阻，用于按压开关
 
-    stepper1.setMaxSpeed(2500.0);     
+    stepper1.setMaxSpeed(3000.0);     
     stepper1.setAcceleration(800.0);  
 
     // 检查步进电机是否到达原点
     while (digitalRead(buttonPin) == HIGH) {
-        stepper1.setSpeed(2000);  // 以较低速度向原点移动
+        stepper1.setSpeed(2500);  // 以较低速度向原点移动
         stepper1.runSpeed();
     }
     motorAtOrigin = true;
@@ -57,16 +57,15 @@ void parseAndExecuteCommand(String input)
     if (input.startsWith("D")) {
         String distanceString = input.substring(1);
         float distanceValue = distanceString.toFloat();
-        if (distanceValue > 0) {
-            movePlatformToDistance(distanceValue);
-        }
+        Serial.println(distanceValue);
+        movePlatformToDistance(distanceValue);
     }
 }
 
 void movePlatformToDistance(float distance_mm) 
 {
     if (motorAtOrigin) {
-        long stepsToMove = distance_mm * 160; // 每毫米对应 160 步，8 细分
+        long stepsToMove = distance_mm * 800; 
         stepper1.moveTo(stepper1.currentPosition() - stepsToMove);
     }
 }
