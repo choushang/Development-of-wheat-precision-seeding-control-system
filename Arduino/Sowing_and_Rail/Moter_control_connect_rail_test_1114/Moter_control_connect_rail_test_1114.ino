@@ -99,8 +99,6 @@ void parseAndSendSerialCommand(String input)
 }
 
 
-
-
 uint32_t floatToIEEE754(float value) {
     union {
         float f;
