@@ -81,6 +81,13 @@ void parseAndSendSerialCommand(String input)
             data[5] = ieeeBytes[2];  // 小端格式：次高位字节（34）
             data[6] = ieeeBytes[3];  // 小端格式：高位字节（42）
             data[7] = 0x00;
+            for (int i = 0; i < sizeof(data); i++) 
+            {
+              Serial.print("0x");
+              Serial.print(data[i], HEX);
+              Serial.print(" ");
+            }
+            Serial.println();
 
             // 发送 CAN 消息
             can.sendMsgBuf(canId, 0, sizeof(data), data);
