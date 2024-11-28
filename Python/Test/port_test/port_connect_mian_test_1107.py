@@ -2,7 +2,6 @@ import sys
 import os
 import threading
 import time
-
 import numpy as np
 import serial
 import datetime
@@ -23,11 +22,10 @@ import logging
 
 logging.basicConfig(
     filename='error_log.txt',  # 日志文件名
-    level=logging.ERROR,       # 设置日志记录级别，ERROR 表示只记录错误及以上级别的日志
+    level=logging.ERROR,  # 设置日志记录级别，ERROR 表示只记录错误及以上级别的日志
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # 日志记录格式
     datefmt='%Y-%m-%d %H:%M:%S'  # 日期和时间格式
 )
-
 
 
 class WelcomeWindow(QWidget):
@@ -89,7 +87,6 @@ class InformationShowWindow(QWidget):
         self.open_gnss_pushButton.clicked.connect(lambda: self.open_gnss_port_selection())
         self.open_speed_sensor_pushButton.clicked.connect(lambda: self.open_speed_sensor_port_selection())
         self.open_box_sensor_pushButton.clicked.connect(lambda: self.open_box_sensor_port_selection())
-
 
         self.sowing_one_number = self.ui.doubleSpinBox
         self.sowing_one_number.editingFinished.connect(self.update_worker_sowing_value)
@@ -188,7 +185,6 @@ class InformationShowWindow(QWidget):
                 logging.error(f"Error occurred during closing sow port: {str(e)}", exc_info=True)
                 QMessageBox.critical(self, "错误", f"关闭播种串口时发生错误：{str(e)}")
 
-
     def on_worker_sow_finished(self):
         QMessageBox.information(self, "信息", "播种已完成")
         pass
@@ -262,7 +258,9 @@ class Worker_gnss(QThread):
             self.ser.close()
             pass
         pass
+
     pass
+
 
 class Worker_sow(QThread):
     finished_signal = pyqtSignal()
