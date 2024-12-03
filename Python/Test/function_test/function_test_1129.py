@@ -6,9 +6,10 @@ import sys
 import os
 import threading
 import time
+import joblib
 import numpy as np
 import serial
-from datetime import datetime
+import datetime
 from openpyxl import Workbook
 import webbrowser
 from PyQt5.QtCore import *
@@ -26,6 +27,7 @@ import serial.tools.list_ports
 import logging
 import socket
 import base64
+from EKF_user import get_fused_speed
 
 logging.basicConfig(
     filename='error_log.txt',  # 日志文件名
@@ -50,7 +52,6 @@ def handle_collected_gnss_data(gnss_data, radar_data, acc_x_data, acc_y_data, ya
     file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_gnss_speed.xlsx"
     wb.save(file_name)
     print(f"Data saved to {file_name}")
-    pass
 
 
 class WelcomeWindow(QWidget):
@@ -69,6 +70,7 @@ class WelcomeWindow(QWidget):
 class InformationShowWindow(QWidget):
     def __init__(self, stacked_widget):
         super().__init__()
+        self.quickly_stop = None
         self.width_control = None
         self.seed_box_value_spinbox = None
         self.box_value_two_show = None
@@ -116,6 +118,7 @@ class InformationShowWindow(QWidget):
         self.box_value_two_show = self.ui.progressBar_2
         self.seed_box_value_spinbox = self.ui.doubleSpinBox_3
         self.width_control = self.ui.doubleSpinBox_4
+        self.quickly_stop = self.ui.pushButton_7
 
         # GNSS模块
         self.open_gnss_pushButton.clicked.connect(lambda: self.open_gnss_port_selection())
@@ -143,6 +146,19 @@ class InformationShowWindow(QWidget):
         self.seed_box_second.setValue(0)
         self.seed_box_value_spinbox.valueChanged.connect(self.update_seedbox_calibration_value)
 
+        # 紧急停止模块
+        self.quickly_stop.clicked.connect(self.close_gnss_port)
+        self.quickly_stop.clicked.connect(self.ntrip_stop)
+        self.quickly_stop.clicked.connect(self.close_speed_sensor_port)
+        self.quickly_stop.clicked.connect(self.close_seedbox_port)
+        self.quickly_stop.clicked.connect(self.close_sow_port)
+        self.quickly_stop.clicked.connect(self.exit_program)
+
+        # 时间显示
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_time)
+        self.timer.start(60000)  # 每1000毫秒更新一次
+
     # GNSS模块
     def open_gnss_port_selection(self):
         # 串口占用检测
@@ -159,6 +175,7 @@ class InformationShowWindow(QWidget):
                 self.worker_gnss.start()
                 # 连接信号
                 self.worker_gnss.mistake_message_transmit.connect(self.mistake_message_show)
+                self.worker_gnss.gnss_speed_signal.connect(self.worker_radar.set_gnss_speed)
                 # 改变图片
                 self.ui.label_19.setPixmap(QPixmap("./icon/滑动开关-开.png"))
         except serial.serialutil.SerialException as error:
@@ -197,12 +214,14 @@ class InformationShowWindow(QWidget):
             ports = list(serial.tools.list_ports.comports())
             port_descriptions = [port.description for port in ports] if ports else ['无可用串口']
             # 创建一个对话框供用户选择串口
-            port, ok = QInputDialog.getItem(self, "选择速度传感器串口", "可用的串口列表：", port_descriptions, 0, False)
-            if ok and port:
-                selected_port = next((port.device for port in ports if port.description == port), None)
+            port_description, ok = QInputDialog.getItem(self, "选择速度传感器串口", "可用的串口列表：",
+                                                        port_descriptions, 0, False)
+            selected_port = next((port.device for port in ports if port.description == port), None)
+            if ok and port_description:
+                selected_port = next((port.device for port in ports if port.description == port_description), None)
                 if selected_port:
                     self.worker_radar = Worker_radar()
-                    self.worker_radar.set_port(port)
+                    self.worker_radar.set_port(selected_port)
                     self.worker_radar.start()
                     # 连接信号
                     self.worker_radar.mistake_message_transmit.connect(self.mistake_message_show)
@@ -271,15 +290,19 @@ class InformationShowWindow(QWidget):
 
     def show_ratio_one(self, ratio):
         self.box_value_one_show.setValue(ratio)
+        if ratio <= 10:
+            self.pop_two(1)
 
     def show_ratio_two(self, ratio):
         self.box_value_two_show.setValue(ratio)
+        if ratio <= 10:
+            self.pop_two(2)
 
     def pop_two(self, which):
-        if which == 1:
+        if int(which) == 1:
             QMessageBox.information(self, "确认", "种箱1种料不足")
             pass
-        if which == 2:
+        if int(which) == 2:
             QMessageBox.information(self, "确认", "种箱2种料不足")
             pass
         pass
@@ -364,19 +387,40 @@ class InformationShowWindow(QWidget):
     def pop(self):
         QMessageBox.information(self, "确认", "地图生成")
 
+    def update_time(self):
+        # 获取当前时间并格式化
+        current_time = datetime.datetime.now().strftime('%Y年%m月%d日 %H:%M')
+
+        # 更新label_4显示的文本
+        self.ui.label_4.setText(current_time)
+
+    # 急停模块
+    def exit_program(self):
+        sys.exit()
+
 
 class Worker_gnss(QThread):
     finished_signal = pyqtSignal()
     mistake_message_transmit = pyqtSignal(str)
     message_generated = threading.Event()
+    gnss_speed_signal = pyqtSignal(float)
+    mutex = QMutex()
+    data_ready_condition = QWaitCondition()
 
     def __init__(self):
         super(Worker_gnss, self).__init__()
+        self.previous_timestamp = None
+        self.time_difference = None
         self.ser = None
         self.port = None
         self.baudrate = 115200
         self.should_run = True
         self.gnss_messages_send = None
+        self.gnss_speed = 0.0
+        self.radar_speed = 0.0
+        self.yaw = 0.0
+        self.acc_x = 0.0
+        self.acc_y = 0.0
 
     def set_port(self, port):
         self.port = port
@@ -386,62 +430,34 @@ class Worker_gnss(QThread):
         """停止线程运行"""
         self.should_run = False
         if self.ser and self.ser.is_open:
-            self.ser.close()  # 确保关闭串口
-
-    # def run(self):
-    #     try:
-    #         lat, lon, alt, speed, rtk_fix_quality = 0, 0, 0, 0.0, 0
-    #         gngga_messages = []
-    #         if self.baudrate is not None and self.port is not None:
-    #             self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
-    #             self.ser.write("gnrmc 0.05\r\n".encode())
-    #             self.ser.write("gngga 0.05\r\n".encode())
-    #             while self.should_run:
-    #                 try:
-    #                     current_timestamp = datetime.now()
-    #                     if self.previous_timestamp:
-    #                         self.time_difference = (current_timestamp - self.previous_timestamp).total_seconds()
-    #                     self.previous_timestamp = current_timestamp
-    #                     raw_message_gngga = self.ser.readline().decode('utf-8').rstrip()
-    #                     if raw_message_gngga.startswith("$GNGGA"):
-    #                         gngga_messages.append(raw_message_gngga)
-    #                         fields = raw_message_gngga.split(",")
-    #                         rtk_fix_quality = fields[6]
-    #                         print(rtk_fix_quality)
-    #                         if len(gngga_messages) % 20 == 0:
-    #                             self.gnss_messages_send = "\r\n".join(gngga_messages) + "\r\n"
-    #                             gngga_messages = []
-    #                             self.message_generated.set()
-    #                     raw_message_gnrmc = self.ser.readline().decode('utf-8').rstrip()
-    #                     if raw_message_gnrmc.startswith("$GNRMC"):
-    #                         print(raw_message_gnrmc)
-    #                         if rtk_fix_quality == '4' or rtk_fix_quality == '5':
-    #                             # todo GNSS速度未使用
-    #                             speed = extract_speed_mps(raw_message_gnrmc)
-    #
-    #                 except Exception as err_1:
-    #                     self.mistake_message_transmit.emit(str(err_1))
-    #                     logging.error(str(err_1), exc_info=True)
-    #                     continue
-    #     except Exception as err_1:
-    #         logging.error(f"{str(err_1)}", exc_info=True)
-    #         self.mistake_message_transmit.emit(str(err_1))
-    #     finally:
-    #         if self.ser and self.ser.is_open:
-    #             self.ser.close()
-    #         self.finished_signal.emit()
+            self.ser.close()
 
     def run(self):
-        # 测试通讯
         try:
+            lat, lon, alt, speed, rtk_fix_quality = 0, 0, 0, 0.0, 0
+            gngga_messages = []
             if self.baudrate is not None and self.port is not None:
                 self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+                self.ser.write("gnrmc 0.05\r\n".encode())
+                self.ser.write("gngga 0.05\r\n".encode())
                 while self.should_run:
                     try:
-                        # 读取 Arduino 发送的 "helloworld" 并打印
-                        raw_message = self.ser.readline().decode('utf-8').rstrip()
-                        if raw_message == "helloworld":
-                            print("Received from Arduino: helloworld")
+                        raw_message_gngga = self.ser.readline().decode('utf-8').rstrip()
+                        if raw_message_gngga.startswith("$GNGGA"):
+                            gngga_messages.append(raw_message_gngga)
+                            fields = raw_message_gngga.split(",")
+                            rtk_fix_quality = fields[6]
+                            print(rtk_fix_quality)
+                            if len(gngga_messages) % 20 == 0:
+                                self.gnss_messages_send = "\r\n".join(gngga_messages) + "\r\n"
+                                gngga_messages = []
+                                self.message_generated.set()
+                        raw_message_gnrmc = self.ser.readline().decode('utf-8').rstrip()
+                        if raw_message_gnrmc.startswith("$GNRMC"):
+                            print(raw_message_gnrmc)
+                            if rtk_fix_quality == '4' or rtk_fix_quality == '5':
+                                self.gnss_speed = extract_speed_mps(raw_message_gnrmc)
+                                self.gnss_speed_signal.emit(self.gnss_speed)
                     except Exception as err_1:
                         self.mistake_message_transmit.emit(str(err_1))
                         logging.error(str(err_1), exc_info=True)
@@ -550,7 +566,7 @@ class Worker_sow(QThread):
         if self.ser and self.ser.is_open:
             try:
                 # 发送停止命令
-                self.ser.write("0\r\n".encode())
+                self.ser.write("R0D0\r\n".encode())
             except Exception as e:
                 logging.error(f"Error occurred while sending stop command: {str(e)}", exc_info=True)
             finally:
@@ -568,7 +584,10 @@ class Worker_sow(QThread):
                     try:
                         if self.sowing_value != self.previous_sowing_value:
                             self.previous_sowing_value = self.sowing_value
-                            message_to_send = f"{self.sowing_value}\r\n"
+                            rotation_speed = int(5 * total_speed / self.sowing_value)
+                            predicted_high_value = gbr_model.predict(np.array([[rotation_speed]]))
+                            predicted_high_value = round(float(predicted_high_value[0]), 1)
+                            message_to_send = f"R{rotation_speed}D{predicted_high_value}\r\n"
                             if self.ser.is_open:  # 检查串口是否打开
                                 self.ser.write(message_to_send.encode())
                     except Exception as err_1:
@@ -581,7 +600,7 @@ class Worker_sow(QThread):
         finally:
             if self.ser and self.ser.is_open:
                 try:
-                    self.ser.write("0\r\n".encode())  # 发送停止命令
+                    self.ser.write("R0D0\r\n".encode())
                 except Exception as e:
                     logging.error(f"播种模块出错: {str(e)}", exc_info=True)
                 finally:
@@ -595,23 +614,49 @@ class Worker_radar(QThread):
 
     def __init__(self):
         super(Worker_radar, self).__init__()
+        self.yaw = None
+        self.acc_y = None
+        self.acc_x = None
+        self.radar_speed = None
+        self.signal_gnss = None
         self.ser = None
         self.should_run = True
         self.port = None
         self.baudrate = 115200
         self.serial_connection = None
+        self.gnss_speed = None
+        self.last_time = None
+
+    def set_gnss_speed(self, speed):
+        self.signal_gnss = True
+        self.gnss_speed = speed
+
+    def set_port(self, port):
+        self.port = port
 
     def run(self):
         try:
-            global radar_speed, acc_x, acc_y, yaw
+            self.last_time = None
             self.serial_connection = serial.Serial(self.port, self.baudrate, timeout=1)
             while self.should_run:
                 try:
-                    line = self.serial_connection.readline().decode('utf-8', errors='ignore').strip()
-                    if line.startswith("R "):
-                        speed = line[1:]
-                        speed = float(speed)
-                        radar_speed = speed
+                    message = self.serial_connection.readline().decode('utf-8', errors='ignore').strip()
+                    line_list = message.split(',')
+                    if len(line_list) == 5 and line_list[0] == 'R':
+                        self.radar_speed = float(line_list[1])
+                        self.acc_x = float(line_list[2])
+                        self.acc_y = float(line_list[3])
+                        self.yaw = float(line_list[4])
+                        current_time = time.time()
+                        if self.last_time is not None:
+                            time_difference = current_time - self.last_time  # 计算时间差
+                            if self.gnss_speed is not None:
+                                estimated_speed = get_fused_speed(self.gnss_speed, self.radar_speed, self.acc_x, self.acc_y,
+                                                                  self.yaw, time_difference)
+                                # todo 融合速度未使用
+                        self.last_time = current_time
+                except ValueError:
+                    continue
                 except Exception as err_1:
                     logging.error(f"速度传感器有误: {str(err_1)}", exc_info=True)
                     self.mistake_message_transmit.emit(str(err_1))
@@ -705,11 +750,11 @@ class Worker_seedbox(QThread):
 
 if __name__ == '__main__':
     try:
-        # 定义全局变量 radar_speed
-        radar_speed = 0.0
-        acc_y = 0.0
-        acc_x = 0.0
-        yaw = 0.0
+        # 定义全局变量
+        total_speed = 0.0
+
+        # 加载模型
+        gbr_model = joblib.load('gradient_boosting_model.pkl')
 
         QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
         app = QApplication(sys.argv)

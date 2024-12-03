@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1496</width>
-    <height>758</height>
+    <width>1500</width>
+    <height>770</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,7 +18,7 @@
     <rect>
      <x>0</x>
      <y>20</y>
-     <width>350</width>
+     <width>471</width>
      <height>50</height>
     </rect>
    </property>
@@ -59,8 +59,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1701</width>
-     <height>891</height>
+     <width>1500</width>
+     <height>770</height>
     </rect>
    </property>
    <property name="font">
@@ -80,7 +80,7 @@
    <property name="geometry">
     <rect>
      <x>900</x>
-     <y>30</y>
+     <y>60</y>
      <width>441</width>
      <height>31</height>
     </rect>
@@ -164,28 +164,6 @@ border-radius: 15px;  /* 圆角半径 */
    </property>
    <property name="alignment">
     <set>Qt::AlignCenter</set>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_11">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>330</y>
-     <width>1141</width>
-     <height>201</height>
-    </rect>
-   </property>
-   <property name="styleSheet">
-    <string notr="true">background-color: #FAFAFA;  /* 非常淡的接近白色 */
-border: 1px solid #E0E0E0;  /* 浅灰色边框 */
-border-radius: 15px;  /* 圆角半径 */
-
-
-
-</string>
-   </property>
-   <property name="text">
-    <string/>
    </property>
   </widget>
   <widget class="QLabel" name="label_12">
@@ -1079,7 +1057,6 @@ border-radius: 15px;  /* 圆角半径 */
   <zorder>label_4</zorder>
   <zorder>label_7</zorder>
   <zorder>label_10</zorder>
-  <zorder>label_11</zorder>
   <zorder>label_12</zorder>
   <zorder>lcdNumber</zorder>
   <zorder>label_13</zorder>

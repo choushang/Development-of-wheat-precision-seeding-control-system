@@ -14,9 +14,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_Form(object):
     def setupUi(self, Form):
         Form.setObjectName("Form")
-        Form.resize(1496, 758)
+        Form.resize(1500, 770)
         self.label = QtWidgets.QLabel(Form)
-        self.label.setGeometry(QtCore.QRect(0, 20, 350, 50))
+        self.label.setGeometry(QtCore.QRect(0, 20, 471, 50))
         font = QtGui.QFont()
         font.setFamily("华文行楷")
         font.setPointSize(25)
@@ -30,7 +30,7 @@ class Ui_Form(object):
         self.label_2.setScaledContents(True)
         self.label_2.setObjectName("label_2")
         self.label_3 = QtWidgets.QLabel(Form)
-        self.label_3.setGeometry(QtCore.QRect(0, 0, 1701, 891))
+        self.label_3.setGeometry(QtCore.QRect(0, 0, 1500, 770))
         font = QtGui.QFont()
         font.setFamily("华文行楷")
         self.label_3.setFont(font)
@@ -39,7 +39,7 @@ class Ui_Form(object):
         self.label_3.setText("")
         self.label_3.setObjectName("label_3")
         self.label_4 = QtWidgets.QLabel(Form)
-        self.label_4.setGeometry(QtCore.QRect(900, 30, 441, 31))
+        self.label_4.setGeometry(QtCore.QRect(900, 60, 441, 31))
         font = QtGui.QFont()
         font.setFamily("华文楷体")
         font.setPointSize(25)
@@ -75,17 +75,6 @@ class Ui_Form(object):
         self.label_10.setFont(font)
         self.label_10.setAlignment(QtCore.Qt.AlignCenter)
         self.label_10.setObjectName("label_10")
-        self.label_11 = QtWidgets.QLabel(Form)
-        self.label_11.setGeometry(QtCore.QRect(40, 330, 1141, 201))
-        self.label_11.setStyleSheet("background-color: #FAFAFA;  /* 非常淡的接近白色 */\n"
-"border: 1px solid #E0E0E0;  /* 浅灰色边框 */\n"
-"border-radius: 15px;  /* 圆角半径 */\n"
-"\n"
-"\n"
-"\n"
-"")
-        self.label_11.setText("")
-        self.label_11.setObjectName("label_11")
         self.label_12 = QtWidgets.QLabel(Form)
         self.label_12.setGeometry(QtCore.QRect(50, 350, 331, 41))
         font = QtGui.QFont()
@@ -463,7 +452,6 @@ class Ui_Form(object):
         self.label_4.raise_()
         self.label_7.raise_()
         self.label_10.raise_()
-        self.label_11.raise_()
         self.label_12.raise_()
         self.lcdNumber.raise_()
         self.label_13.raise_()
