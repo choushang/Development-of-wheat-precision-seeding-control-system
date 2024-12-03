@@ -1,5 +1,6 @@
 # 版本说明：
 # 1128：1.GNSS串口通讯 2.播种串口通讯
+# 1129：1.速度检测窗口通讯 2.播种种箱检测
 
 import sys
 import os
@@ -68,6 +69,18 @@ class WelcomeWindow(QWidget):
 class InformationShowWindow(QWidget):
     def __init__(self, stacked_widget):
         super().__init__()
+        self.width_control = None
+        self.seed_box_value_spinbox = None
+        self.box_value_two_show = None
+        self.box_value_one_show = None
+        self.close_box_sensor_pushButton = None
+        self.open_box_sensor_pushButton = None
+        self.close_speed_sensor_pushButton = None
+        self.open_speed_sensor_pushButton = None
+        self.worker_seedbox = None
+        self.seed_box_second = None
+        self.seed_box = None
+        self.sowing_one_number = None
         self.worker_radar = None
         self.ntrip_work = None
         self.worker_gnss = None
@@ -76,20 +89,8 @@ class InformationShowWindow(QWidget):
         self.open_sow_pushButton = None
         self.pause_sow_pushButton = None
         self.close_sow_pushButton = None
-        # self.plot_map_pushButton = None
-        # self.upload_sow_information_pushButton = None
-        # self.calculate_area_pushButton = None
-        # self.stop_pushButton = None
         self.open_gnss_pushButton = None
         self.close_gnss_pushButton = None
-        # self.open_speed_sensor_pushButton = None
-        # self.close_speed_sensor_pushButton = None
-        # self.open_box_sensor_pushButton = None
-        # self.close_box_sensor_pushButton = None
-        # self.sow_selected_port = None
-        # self.box_sersor_selected_port = None
-        # self.speed_sersor_selected_port = None
-        # self.gnss_selected_port = None
         self.stacked_widget = stacked_widget
         self.ui = Ui_Form()
         self.ui.setupUi(self)
@@ -97,6 +98,7 @@ class InformationShowWindow(QWidget):
         self.setFixedSize(1500, 770)
 
     def ui_process(self):
+        # 控件定义
         self.open_sow_pushButton = self.ui.pushButton
         self.pause_sow_pushButton = self.ui.pushButton_2
         self.close_sow_pushButton = self.ui.pushButton_3
@@ -110,24 +112,38 @@ class InformationShowWindow(QWidget):
         self.close_speed_sensor_pushButton = self.ui.pushButton_11
         self.open_box_sensor_pushButton = self.ui.pushButton_12
         self.close_box_sensor_pushButton = self.ui.pushButton_13
+        self.box_value_one_show = self.ui.progressBar
+        self.box_value_two_show = self.ui.progressBar_2
+        self.seed_box_value_spinbox = self.ui.doubleSpinBox_3
+        self.width_control = self.ui.doubleSpinBox_4
 
+        # GNSS模块
         self.open_gnss_pushButton.clicked.connect(lambda: self.open_gnss_port_selection())
         # self.open_gnss_pushButton.clicked.connect(self.ntrip_start)
         self.close_gnss_pushButton.clicked.connect(self.close_gnss_port)
         # self.close_gnss_pushButton.clicked.connect(self.ntrip_stop)
 
+        # 速度检测模块
         self.open_speed_sensor_pushButton.clicked.connect(lambda: self.open_speed_sensor_port_selection())
-        self.close_speed_sensor_pushButton.clicked.connect(self.close_radar_port)
+        self.close_speed_sensor_pushButton.clicked.connect(self.close_speed_sensor_port)
 
-        # self.open_box_sensor_pushButton.clicked.connect(lambda: self.open_box_sensor_port_selection())
-
+        # 播种模块
         self.sowing_one_number = self.ui.doubleSpinBox
         self.sowing_one_number.editingFinished.connect(self.update_worker_sowing_value)
-
         self.open_sow_pushButton.clicked.connect(lambda: self.open_sow_port_selection())
         self.pause_sow_pushButton.clicked.connect(self.toggle_pause_sow)
         self.close_sow_pushButton.clicked.connect(self.close_sow_port)
 
+        # 种箱检测模块
+        self.seed_box = self.ui.progressBar
+        self.seed_box_second = self.ui.progressBar_2
+        self.open_box_sensor_pushButton.clicked.connect(lambda: self.open_box_sensor_port_selection())
+        self.close_box_sensor_pushButton.clicked.connect(self.close_seedbox_port)
+        self.seed_box.setValue(0)
+        self.seed_box_second.setValue(0)
+        self.seed_box_value_spinbox.valueChanged.connect(self.update_seedbox_calibration_value)
+
+    # GNSS模块
     def open_gnss_port_selection(self):
         # 串口占用检测
         try:
@@ -144,7 +160,7 @@ class InformationShowWindow(QWidget):
                 # 连接信号
                 self.worker_gnss.mistake_message_transmit.connect(self.mistake_message_show)
                 # 改变图片
-                self.ui.label_19.setPixmap(QPixmap("./icon/开关-关.png"))
+                self.ui.label_19.setPixmap(QPixmap("./icon/滑动开关-开.png"))
         except serial.serialutil.SerialException as error:
             logging.error(f"GNSS串口启动失败: {str(error)}", exc_info=True)
             self.mistake_message_show(error)
@@ -156,7 +172,7 @@ class InformationShowWindow(QWidget):
                 self.worker_gnss.quit()
                 self.worker_gnss.wait()
             self.worker_gnss = None
-        self.ui.label_19.setPixmap(QPixmap("./icon/滑动开关-关闭.png"))
+        self.ui.label_19.setPixmap(QPixmap("./icon/滑动开关-关.png"))
 
     def ntrip_start(self):
         try:
@@ -174,47 +190,101 @@ class InformationShowWindow(QWidget):
             self.ntrip_work.wait()
             self.ntrip_work = None
 
+    # 速度检测模块
     def open_speed_sensor_port_selection(self):
         try:
             # 获取可用的串口列表
             ports = list(serial.tools.list_ports.comports())
             port_descriptions = [port.description for port in ports] if ports else ['无可用串口']
-
             # 创建一个对话框供用户选择串口
             port, ok = QInputDialog.getItem(self, "选择速度传感器串口", "可用的串口列表：", port_descriptions, 0, False)
             if ok and port:
-                self.worker_radar = Worker_radar()
-                self.worker_radar.set_port(port)
-                self.worker_radar.start()
-                # 连接信号
-                self.worker_radar.mistake_message_transmit.connect(self.mistake_message_show)
+                selected_port = next((port.device for port in ports if port.description == port), None)
+                if selected_port:
+                    self.worker_radar = Worker_radar()
+                    self.worker_radar.set_port(port)
+                    self.worker_radar.start()
+                    # 连接信号
+                    self.worker_radar.mistake_message_transmit.connect(self.mistake_message_show)
+                    self.ui.label_16.setPixmap(QPixmap("./icon/滑动开关-开.png"))
         except serial.serialutil.SerialException as error:
-            logging.error(f"雷达串口启动失败: {str(error)}", exc_info=True)
+            logging.error(f"速度传感器串口启动失败: {str(error)}", exc_info=True)
             self.mistake_message_show(str(error))
 
-    def close_radar_port(self):
+    def close_speed_sensor_port(self):
         if self.worker_radar is not None:
             if self.worker_radar.isRunning():
                 self.worker_radar.should_run = False
                 self.worker_radar.quit()
                 self.worker_radar.wait()
             self.worker_radar = None
+        self.ui.label_16.setPixmap(QPixmap("./icon/滑动开关-关.png"))
 
+    # 种箱检测模块
     def open_box_sensor_port_selection(self):
         try:
             # 获取可用的串口列表
             ports = list(serial.tools.list_ports.comports())
             port_descriptions = [port.description for port in ports] if ports else ['无可用串口']
-
-            # 创建一个对话框供用户选择串口
-            port, ok = QInputDialog.getItem(self, "选择种箱信息传感器串口", "可用的串口列表：", port_descriptions, 0,
-                                            False)
-            if ok and port:
-                pass
-            pass
+            port_description, ok = QInputDialog.getItem(self, "选择种箱信息传感器串口", "可用的串口列表：",
+                                                        port_descriptions, 0, False)
+            if ok and port_description:
+                selected_port = next((port.device for port in ports if port.description == port_description), None)
+                print(selected_port)
+                # 弹窗询问是否进行种箱标定
+                reply = QMessageBox.question(self, '种箱标定', '是否进行种箱标定？', QMessageBox.Yes | QMessageBox.No,
+                                             QMessageBox.No)
+                if selected_port:
+                    print(selected_port)
+                    self.worker_seedbox = Worker_seedbox()
+                    self.worker_seedbox.set_port(selected_port)
+                    if reply == QMessageBox.Yes:
+                        self.worker_seedbox.calibrate = True
+                    else:
+                        self.worker_seedbox.calibrate = False
+                    self.worker_seedbox.start()
+                    # 连接信号
+                    self.worker_seedbox.mistake_message_transmit.connect(self.mistake_message_show)
+                    self.ui.label_24.setPixmap(QPixmap("./icon/滑动开关-开.png"))
+                    self.worker_seedbox.send_box_value.connect(self.show_box_value)
+                    self.worker_seedbox.send_ratio_one.connect(self.show_ratio_one)
+                    self.worker_seedbox.send_ratio_two.connect(self.show_ratio_two)
         except serial.serialutil.SerialException as error:
-            self.mistake_message_show(error)
+            logging.error(f"种箱传感器串口启动失败: {str(error)}", exc_info=True)
+            self.mistake_message_show(str(error))
 
+    def close_seedbox_port(self):
+        if self.worker_seedbox is not None:
+            if self.worker_seedbox.isRunning():
+                self.worker_seedbox.should_run = False
+                self.worker_seedbox.quit()
+                self.worker_seedbox.wait()
+            self.worker_seedbox = None
+        self.ui.label_24.setPixmap(QPixmap("./icon/滑动开关-关.png"))
+
+    def update_seedbox_calibration_value(self):
+        if self.worker_seedbox is not None:
+            self.worker_seedbox.box_value = self.seed_box_value_spinbox.value()
+
+    def show_box_value(self, value):
+        self.seed_box_value_spinbox.setValue(value)
+
+    def show_ratio_one(self, ratio):
+        self.box_value_one_show.setValue(ratio)
+
+    def show_ratio_two(self, ratio):
+        self.box_value_two_show.setValue(ratio)
+
+    def pop_two(self, which):
+        if which == 1:
+            QMessageBox.information(self, "确认", "种箱1种料不足")
+            pass
+        if which == 2:
+            QMessageBox.information(self, "确认", "种箱2种料不足")
+            pass
+        pass
+
+    # 播种控制模块
     def open_sow_port_selection(self):
         # 获取可用的串口列表
         ports = list(serial.tools.list_ports.comports())
@@ -230,9 +300,6 @@ class InformationShowWindow(QWidget):
                 self.worker_sow.start()
                 # 连接信号
                 self.worker_sow.mistake_message_transmit.connect(self.mistake_message_show)
-                pass
-            pass
-        pass
 
     def toggle_pause_sow(self):
         """暂停或恢复播种"""
@@ -274,9 +341,28 @@ class InformationShowWindow(QWidget):
             pass
         pass
 
+    # 错误提示
     def mistake_message_show(self, message):
         QMessageBox.information(self, "错误", "错误原因{}".format(message))
         pass
+
+    # 后处理模块
+    def open_file(self):
+        self.filename = QFileDialog.getOpenFileNames(self, '选择文件', os.getcwd(), "All Files(*)")
+        self.path = self.filename[0]
+
+    def plot_map(self):
+        BDS_plot(self.path[0])
+        webbrowser.open_new_tab('loc_map.html')
+
+    def distance(self):
+        n = self.width_control.value()
+        m = BDS_distance(self.path[0], n)
+        QMessageBox.information(self, "工作结果", "工作距离为{}米, 工作面积为{}平方米".format(m[0], m[1]),
+                                QMessageBox.Ok)
+
+    def pop(self):
+        QMessageBox.information(self, "确认", "地图生成")
 
 
 class Worker_gnss(QThread):
@@ -474,56 +560,34 @@ class Worker_sow(QThread):
     def update_sowing_value(self, value):
         self.sowing_value = value
 
-    # def run(self):
-    #     try:
-    #         if self.baudrate is not None and self.port is not None:
-    #             self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
-    #             while self.should_run:
-    #                 try:
-    #                     if self.sowing_value != self.previous_sowing_value:
-    #                         self.previous_sowing_value = self.sowing_value
-    #                         message_to_send = f"{self.sowing_value}\r\n"
-    #                         if self.ser.is_open:  # 检查串口是否打开
-    #                             self.ser.write(message_to_send.encode())
-    #                 except Exception as err_1:
-    #                     logging.error(f"Error occurred in SOW worker thread: {str(err_1)}", exc_info=True)
-    #                     self.mistake_message_transmit.emit(str(err_1))
-    #                     continue
-    #     except Exception as err_1:
-    #         logging.error(f"Failed to initialize SOW worker: {str(err_1)}", exc_info=True)
-    #         self.mistake_message_transmit.emit(str(err_1))
-    #     finally:
-    #         if self.ser and self.ser.is_open:
-    #             try:
-    #                 self.ser.write("0\r\n".encode())  # 发送停止命令
-    #             except Exception as e:
-    #                 logging.error(f"Error occurred while sending stop command in finally block: {str(e)}",
-    #                               exc_info=True)
-    #             finally:
-    #                 self.ser.close()
-    #         self.finished_signal.emit()
-
     def run(self):
         try:
             if self.baudrate is not None and self.port is not None:
                 self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
                 while self.should_run:
                     try:
-                        # 读取 Arduino 发送的 "helloworld" 并打印
-                        raw_message = self.ser.readline().decode('utf-8').rstrip()
-                        if raw_message == "helloworld":
-                            print("Received from Arduino: helloworld")
+                        if self.sowing_value != self.previous_sowing_value:
+                            self.previous_sowing_value = self.sowing_value
+                            message_to_send = f"{self.sowing_value}\r\n"
+                            if self.ser.is_open:  # 检查串口是否打开
+                                self.ser.write(message_to_send.encode())
                     except Exception as err_1:
+                        logging.error(f"播种模块出错: {str(err_1)}", exc_info=True)
                         self.mistake_message_transmit.emit(str(err_1))
-                        logging.error(str(err_1), exc_info=True)
                         continue
         except Exception as err_1:
-            logging.error(f"{str(err_1)}", exc_info=True)
+            logging.error(f"播种模块出错: {str(err_1)}", exc_info=True)
             self.mistake_message_transmit.emit(str(err_1))
         finally:
             if self.ser and self.ser.is_open:
-                self.ser.close()
+                try:
+                    self.ser.write("0\r\n".encode())  # 发送停止命令
+                except Exception as e:
+                    logging.error(f"播种模块出错: {str(e)}", exc_info=True)
+                finally:
+                    self.ser.close()
             self.finished_signal.emit()
+
 
 class Worker_radar(QThread):
     finished_signal = pyqtSignal()
@@ -539,7 +603,7 @@ class Worker_radar(QThread):
 
     def run(self):
         try:
-            global radar_speed
+            global radar_speed, acc_x, acc_y, yaw
             self.serial_connection = serial.Serial(self.port, self.baudrate, timeout=1)
             while self.should_run:
                 try:
@@ -548,27 +612,105 @@ class Worker_radar(QThread):
                         speed = line[1:]
                         speed = float(speed)
                         radar_speed = speed
-                        # 将数据存储到列表中
-                        self.speed_list.append(speed)
-                        self.speed_data_for_avg.append(speed)
-                        if len(self.speed_data_for_avg) == 5:
-                            avg_speed = sum(self.speed_data_for_avg) / 5
-                            self.avg_data_parsed.emit(avg_speed)
-                            self.speed_data_for_avg.clear()
                 except Exception as err_1:
+                    logging.error(f"速度传感器有误: {str(err_1)}", exc_info=True)
                     self.mistake_message_transmit.emit(str(err_1))
                     continue
-            self.finished_signal.emit()
         except Exception as err_1:
+            logging.error(f"速度传感器有误: {str(err_1)}", exc_info=True)
             self.mistake_message_transmit.emit(err_1)
-            self.data_collected_signal.emit(self.speed_list, self.time_stamps)
         finally:
-            self.data_collected_signal.emit(self.speed_list, self.time_stamps)
+            self.finished_signal.emit()
+
+
+class Worker_seedbox(QThread):
+    finished_signal = pyqtSignal()
+    mistake_message_transmit = pyqtSignal(str)
+    send_ratio_one = pyqtSignal(int)
+    send_ratio_two = pyqtSignal(int)
+    send_box_value = pyqtSignal(float)
+
+    def __init__(self):
+        super(Worker_seedbox, self).__init__()
+        self.should_run = True
+        self.port = None
+        self.baudrate = 9600
+        self.box_value = None
+        self.ser = None
+        self.calibrate = False
+
+    def set_port(self, port):
+        self.port = port
+
+    def stop(self):
+        self.should_run = False
+        if self.ser and self.ser.is_open:
+            self.ser.close()  # 确保关闭串口
+
+    def run(self):
+        try:
+            if self.port is not None:
+                self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+                while self.should_run:
+                    if self.calibrate:
+                        response = None
+                        # 通知单片机进行标定
+                        self.ser.write(b'CALIBRATE\n')
+                        data = self.ser.readline().decode().strip()
+                        if data.startswith('0,0,'):
+                            response = data
+                        if response:
+                            try:
+                                Identifier, Type, Data = response.split(',')
+                                Identifier = int(Identifier)
+                                Type = int(Type)
+                                Data = float(Data)
+                                if Identifier == 0 and Type == 0:
+                                    self.box_value = Data
+                                    self.send_box_value.emit(self.box_value)
+                                    self.calibrate = False
+                            except Exception as err_1:
+                                self.mistake_message_transmit.emit(str(err_1))
+                                logging.error(f"种箱标定错误: {str(err_1)}", exc_info=True)
+                    elif not self.calibrate:
+                        data = self.ser.readline().decode().strip()
+                        print(data)
+                        try:
+                            Identifier, Type, Data = data.split(',')
+                            Identifier = int(Identifier)
+                            Type = int(Type)
+                            Data = float(Data)
+                            if Identifier == 0:
+                                if Type == 1:
+                                    ratio = int(((self.box_value - Data) / self.box_value) * 100)
+                                    self.send_ratio_one.emit(ratio)
+                                elif Type == 2:
+                                    ratio = int(((self.box_value - Data) / self.box_value) * 100)
+                                    self.send_ratio_two.emit(ratio)
+                        except ValueError:
+                            logging.error(f"种箱模块数据错误", exc_info=True)
+                            continue
+                        except Exception as err_1:
+                            logging.error(f"种箱模块错误：{str(err_1)}", exc_info=True)
+        except Exception as err_1:
+            logging.error(f"种箱模块错误：{str(err_1)}", exc_info=True)
+            self.mistake_message_transmit.emit(str(err_1))
+        finally:
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+            self.send_ratio_one.emit(0)
+            self.send_ratio_two.emit(0)
             self.finished_signal.emit()
 
 
 if __name__ == '__main__':
     try:
+        # 定义全局变量 radar_speed
+        radar_speed = 0.0
+        acc_y = 0.0
+        acc_x = 0.0
+        yaw = 0.0
+
         QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
         app = QApplication(sys.argv)
         stacked_widget = QStackedWidget()
